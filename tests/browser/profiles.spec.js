@@ -132,3 +132,37 @@ test('scan and suggestions work on an actual non-secure HTTP origin', async ({ p
     await page.getByRole('button', { name: 'Generate missing details' }).click();
     await expect(page.getByRole('heading', { name: 'Review suggested details' })).toBeVisible();
 });
+
+
+test('wand entry matches native rows and opens with the keyboard', async ({ page }, testInfo) => {
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    const launcher = page.locator('#extensionsMenu .npc-launcher');
+    await expect(launcher).toHaveClass('list-group-item npc-launcher');
+    await expect(launcher.locator('.fa-address-book')).toHaveCount(1);
+    expect(await launcher.evaluate(node => getComputedStyle(node).borderWidth)).toBe('0px');
+    await page.locator('#extensionsMenu').screenshot({ path: `test-results/${testInfo.project.name}-wand.png` });
+    await launcher.press('Enter');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await launcher.press('Space');
+    await expect(page.getByRole('dialog')).toBeVisible();
+});
+
+test('unverified fields leave a visible profile and useful retry details', async ({ page }, testInfo) => {
+    await page.evaluate(async () => {
+        const { npc, response } = await import('/tests/fixtures.js');
+        host.respond = async () => JSON.stringify(response(npc({ fields: {
+            species: { value: 'human', evidence: [{ sourceId: 'm1:p0' }] },
+            backstory: { value: 'Invented', evidence: [{ messageId: 1, quote: 'Mira sailed the seas.' }] },
+        } })));
+    });
+    await page.getByRole('button', { name: 'Scan recent messages' }).click();
+    await expect(page.getByRole('button', { name: /Mira human/ })).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Created 1 profile. Skipped 1');
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+    await page.getByText('Scan details', { exact: true }).click();
+    await expect(page.locator('.npc-scan-details')).toContainText('Mira — Short backstory');
+    await expect(page.locator('.npc-error')).toBeHidden();
+    await page.screenshot({ path: `test-results/${testInfo.project.name}-partial-scan.png`, fullPage: true });
+    expect(await page.locator('.npc-profiles-dialog').evaluate(node => node.scrollWidth > node.clientWidth + 1)).toBe(false);
+});

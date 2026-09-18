@@ -63,11 +63,23 @@ export class ProfilesUI {
         content.append(button('Open Castkeeper', () => this.open()));
         this.settingsRoot.append(drawer);
         (document.querySelector('#extensions_settings2') ?? document.querySelector('#extensions_settings') ?? document.body).append(this.settingsRoot);
-        this.launcher = button('Castkeeper', () => this.open(), 'npc-launcher');
-        this.launcher.title = 'Browse and edit NPC profiles for this chat';
         const menu = document.querySelector('#extensionsMenu');
-        if (menu) menu.append(this.launcher);
-        else { this.launcher.classList.add('npc-launcher-floating'); document.body.append(this.launcher); }
+        if (menu) {
+            this.launcher = element('div', 'list-group-item npc-launcher');
+            this.launcher.setAttribute('role', 'button'); this.launcher.tabIndex = 0;
+            const menuIcon = element('i', 'fa-solid fa-address-book fa-fw');
+            menuIcon.setAttribute('aria-hidden', 'true');
+            this.launcher.append(menuIcon, element('span', '', 'Castkeeper'));
+            this.launcher.addEventListener('click', () => this.open());
+            this.launcher.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.launcher.click(); }
+            });
+            menu.append(this.launcher);
+        } else {
+            this.launcher = button('Castkeeper', () => this.open(), 'npc-launcher npc-launcher-floating');
+            document.body.append(this.launcher);
+        }
+        this.launcher.title = 'Browse and edit NPC profiles for this chat';
 
         this.dialog = element('dialog', 'npc-profiles-dialog');
         this.dialog.setAttribute('aria-labelledby', 'npc-profiles-title');
@@ -85,6 +97,10 @@ export class ProfilesUI {
         this.status = element('span', 'npc-status'); this.status.setAttribute('role', 'status'); this.status.setAttribute('aria-live', 'polite');
         this.retryButton = button('Retry', () => this.action(async () => this.handleResult(await this.engine.retry())));
         statusRow.append(this.status, this.retryButton); this.dialog.append(statusRow);
+        this.scanDetails = element('details', 'npc-scan-details'); this.scanDetails.hidden = true;
+        this.scanDetailsList = element('ul');
+        this.scanDetails.append(element('summary', '', 'Scan details'), this.scanDetailsList);
+        this.dialog.append(this.scanDetails);
         this.error = element('p', 'npc-error'); this.error.setAttribute('role', 'alert'); this.error.hidden = true; this.dialog.append(this.error);
         const body = element('div', 'npc-layout');
         this.sidebar = element('aside', 'npc-sidebar');
@@ -144,6 +160,8 @@ export class ProfilesUI {
         this.status.textContent = view.status.message;
         this.status.dataset.kind = view.status.kind;
         this.retryButton.hidden = !view.status.retry;
+        this.scanDetails.hidden = !view.status.details?.length;
+        this.scanDetailsList.replaceChildren(...(view.status.details ?? []).map(issue => element('li', '', `${issue.npc}${issue.field ? ` — ${FIELDS[issue.field]?.label ?? issue.field}` : ' — encounter'}: ${issue.reason}`)));
         this.retryButton.disabled = view.status.kind === 'busy';
         this.scanButton.disabled = view.status.kind === 'busy' || !view.settings.enabled || !view.chatKey;
         this.newButton.disabled = !view.chatKey;

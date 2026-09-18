@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, profiles, scanChanges, applyScan, evidenceMessages, historySources, reconcile, editProfile, deleteProfile, completionChanges, applyCompletion, injection, parseResponse, mentions, uid } from '../src/model.js';
+import { createState, profiles, scanChanges as scanReport, sourcePassages, applyScan, evidenceMessages, historySources, reconcile, editProfile, deleteProfile, completionChanges, applyCompletion, injection, parseResponse, mentions, uid } from '../src/model.js';
 import { chat, npc, response, quote, fact } from './fixtures.js';
+
+const scanChanges = (...args) => scanReport(...args).plans;
 
 function seeded() {
     const state = createState(), history = chat(), messages = evidenceMessages(history, 1);
@@ -31,10 +33,13 @@ test('player and active character cards are excluded even in otherwise valid mod
     assert.deepEqual(scanChanges(state, response(npc()), messages, ['Mira']), []);
 });
 
-test('malformed fields or fabricated evidence reject an entire scan before mutation', () => {
+test('malformed fields or fabricated evidence are isolated before mutation', () => {
     const { state, messages } = seeded(), before = structuredClone(state);
     for (const fields of [{ species: fact('elf', 'Mira is an elf.') }, { traits: fact('patient') }, { inventedField: fact('x') }]) {
-        assert.throws(() => scanChanges(state, response(npc(), npc({ name: 'Ember', fields })), messages));
+        const report = scanReport(state, response(npc(), npc({ name: 'Ember', fields })), messages);
+        assert.equal(report.plans.length, 2);
+        assert.equal(report.issues.length, 1);
+        assert.deepEqual(Object.keys(report.plans[1].fields), ['name']);
         assert.deepEqual(state, before);
     }
 });
@@ -42,7 +47,9 @@ test('malformed fields or fabricated evidence reject an entire scan before mutat
 test('facts cannot cite older context outside the authorized exchange', () => {
     const { state, history } = seeded();
     history.push({ is_user: true, mes: 'Hello' }, { is_user: false, mes: 'Mira waves.' });
-    assert.throws(() => scanChanges(state, response(npc({ id: 'mira' })), evidenceMessages(history, 3)), /excerpt/);
+    const report = scanReport(state, response(npc({ id: 'mira' })), evidenceMessages(history, 3));
+    assert.equal(report.plans.length, 0);
+    assert.match(report.issues[0].reason, /excerpt/);
 });
 
 test('returning aliases reuse an ID while an ambiguous shared name does not merge profiles', () => {
@@ -53,7 +60,9 @@ test('returning aliases reuse an ID while an ambiguous shared name does not merg
     const data = npc({ name: 'Captain Mira', fields: {}, encounter: quote('Captain Mira returns.') });
     assert.equal(scanChanges(state, response(data), evidenceMessages(history, 1))[0].id, 'mira');
     editProfile(state, null, { name: 'Captain Mira' }, [], () => 'other');
-    assert.throws(() => scanChanges(state, response(data), evidenceMessages(history, 1)), /Ambiguous/);
+    const report = scanReport(state, response(data), evidenceMessages(history, 1));
+    assert.equal(report.plans.length, 0);
+    assert.match(report.issues[0].reason, /Ambiguous/);
 });
 
 test('manual edits lock automatically; explicitly unlocking allows later supported changes', () => {
@@ -150,7 +159,9 @@ test('later likes enrich earlier evidence and deleting the later exchange restor
 test('prototype property names are not accepted as profile fields', () => {
     const { state, messages } = seeded();
     const fields = JSON.parse('{"__proto__":{"value":"bad","evidence":[{"messageId":1,"quote":"Mira"}]}}');
-    assert.throws(() => scanChanges(state, response(npc({ fields })), messages), /Unknown profile field/);
+    const report = scanReport(state, response(npc({ fields })), messages);
+    assert.equal(Object.keys(report.plans[0].fields).length, 0);
+    assert.match(report.issues[0].reason, /Unknown profile field/);
     assert.equal(Object.prototype.value, undefined);
 });
 
@@ -172,4 +183,49 @@ test('IDs remain usable and distinct if the browser exposes no crypto API', () =
     const ids = new Set(Array.from({ length: 100 }, () => uid(null)));
     assert.equal(ids.size, 100);
     for (const id of ids) assert.match(id, /^npc-[\da-z]+-[\da-z]+-[\da-z]*$/);
+});
+
+
+test('passage citations store unchanged source text and skip invented references', () => {
+    const state = createState(), messages = evidenceMessages(chat(), 1);
+    const citation = { sourceId: 'm1:p0' };
+    const report = scanReport(state, response(npc({ encounter: citation, fields: {
+        species: { value: 'human', evidence: [citation] },
+        backstory: { value: 'An invented history', evidence: [{ sourceId: 'm999:p0' }] },
+    } })), messages);
+    assert.equal(report.plans.length, 1); assert.equal(report.issues.length, 1);
+    assert.equal(report.plans[0].fields.backstory, undefined);
+    assert.equal(report.plans[0].fields.species.evidence[0].quote, messages[1].text);
+});
+
+test('legacy citations tolerate typography and uniquely recover mistaken message numbering', () => {
+    const messages = [{ messageId: 12, text: '**Mira** says, “I like tea.”\nShe smiles.' }];
+    const citation = { messageId: '1', quote: 'Mira says, "I like tea." She smiles.' };
+    const report = scanReport(createState(), response(npc({ encounter: citation, fields: { likes: { value: ['tea'], evidence: [citation] } } })), messages);
+    assert.equal(report.issues.length, 0);
+    assert.equal(report.plans[0].fields.likes.evidence[0].messageId, 12);
+    assert.equal(report.plans[0].fields.likes.evidence[0].quote, messages[0].text);
+});
+
+test('ambiguous legacy quotes and substantive paraphrases cannot be verified', () => {
+    const messages = [{ messageId: 2, text: 'Mira does not like tea.' }, { messageId: 4, text: 'Mira does not like tea.' }];
+    for (const citation of [{ messageId: 1, quote: 'Mira does not like tea.' }, { messageId: 2, quote: 'Mira likes tea.' }]) {
+        const report = scanReport(createState(), response(npc({ encounter: citation, fields: {} })), messages);
+        assert.equal(report.plans.length, 0); assert.equal(report.issues.length, 1);
+    }
+});
+
+test('one unverifiable encounter does not discard a verified NPC', () => {
+    const report = scanReport(createState(), response(npc(), npc({ name: 'Ghost', encounter: { sourceId: 'm99:p0' } })), evidenceMessages(chat(), 1));
+    assert.equal(report.plans.length, 1); assert.equal(report.plans[0].name, 'Mira');
+    assert.equal(report.issues[0].field, null);
+});
+
+test('long messages produce bounded original passages with stable unique IDs', () => {
+    const messages = [{ messageId: 10, text: ('Mira enters the room. '.repeat(130)) + '\nEmber waves.' }];
+    const passages = sourcePassages(messages);
+    assert.ok(passages.length > 3);
+    assert.equal(new Set(passages.map(item => item.sourceId)).size, passages.length);
+    for (const passage of passages) { assert.ok(messages[0].text.includes(passage.text)); assert.ok(passage.text.length <= 900); }
+    assert.deepEqual(passages, sourcePassages(messages));
 });

@@ -170,3 +170,49 @@ test('unsupported stored data stays untouched', async () => {
     assert.deepEqual(host.chatMetadata[KEY], { version: 999, secretFutureData: 'retain' });
     assert.equal(host.calls.length, 0); engine.dispose();
 });
+
+
+test('partial scans persist valid fields, explain skips and retry the scan', async () => {
+    const { host, engine } = setup();
+    host.respond = async () => JSON.stringify(response(npc({ fields: {
+        species: { value: 'human', evidence: [{ sourceId: 'm1:p0' }] },
+        backstory: { value: 'Unsupported', evidence: [{ messageId: 1, quote: 'Mira used to be a sailor.' }] },
+    } })));
+    await engine.scanRecent();
+    assert.equal(engine.view().profiles[0].values.species, 'human');
+    assert.equal(engine.view().profiles[0].values.backstory, '');
+    assert.match(engine.status.message, /Created 1 profile/);
+    assert.equal(engine.status.kind, 'warning'); assert.equal(engine.status.retry, true);
+    assert.equal(engine.status.details[0].field, 'backstory');
+    host.respond = async () => JSON.stringify(response(npc()));
+    await engine.retry();
+    assert.equal(engine.view().profiles.length, 1);
+    assert.match(engine.status.message, /Updated 1 profile/);
+    assert.equal(engine.status.retry, false); engine.dispose();
+});
+
+test('unverifiable encounters are retryable without saving; a genuinely empty scan says so', async () => {
+    const { host, engine } = setup();
+    host.respond = async () => JSON.stringify(response(npc({ encounter: { sourceId: 'bad' } })));
+    await engine.scanRecent();
+    assert.equal(host.saved.length, 0); assert.equal(engine.status.retry, true);
+    assert.match(engine.status.message, /No profiles could be verified/);
+    host.respond = async () => JSON.stringify(response());
+    await engine.retry();
+    assert.equal(host.saved.length, 1); assert.equal(engine.status.retry, false);
+    assert.match(engine.status.message, /No relevant NPCs found/); engine.dispose();
+});
+
+test('automatic scanning accepts the source IDs supplied in its actual prompt', async () => {
+    const { host, engine } = setup();
+    host.respond = async prompt => {
+        const sources = JSON.parse(prompt.split('AUTHORIZED SOURCE PASSAGES:\n')[1].split('\nREQUEST IDENTIFIER:')[0]);
+        const passage = sources.find(item => item.text.includes('Mira'));
+        const ref = { sourceId: passage.sourceId };
+        return JSON.stringify(response(npc({ encounter: ref, fields: { species: { value: 'human', evidence: [ref] } } })));
+    };
+    await host.eventSource.emit('MESSAGE_RECEIVED', 1, 'normal');
+    await until(() => engine.status.message === 'Created 1 profile.');
+    assert.equal(engine.view().profiles[0].values.species, 'human');
+    assert.equal(host.calls.length, 1); engine.dispose();
+});

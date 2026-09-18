@@ -8,7 +8,7 @@ Targets **SillyTavern 1.19.0 or later**. Uses your currently selected AI connect
 
 ### Local folder or ZIP
 
-1. Extract `SillyTavern-Castkeeper-1.0.1.zip`, or use the `dist/SillyTavern-Castkeeper` folder produced by `npm run package`.
+1. Extract `SillyTavern-Castkeeper-1.0.2.zip`, or use the `dist/SillyTavern-Castkeeper` folder produced by `npm run package`.
 2. Copy that folder into **one** of these locations inside your SillyTavern installation:
    - Current user: `data/<your-user-handle>/extensions/SillyTavern-Castkeeper`
    - All users: `public/scripts/extensions/third-party/SillyTavern-Castkeeper`
@@ -28,6 +28,13 @@ https://github.com/Diamond-Shark-art/SillyTavern-Castkeeper
 Reload SillyTavern after installation. Updates can be pulled through SillyTavern's extension manager.
 
 Prefer a local installation? Download the ZIP from [Releases](https://github.com/Diamond-Shark-art/SillyTavern-Castkeeper/releases/latest) and follow the folder instructions above.
+
+## Version 1.0.2
+
+- Scans now cite numbered passages instead of requiring the model to reproduce exact quotations. Older quote responses also tolerate whitespace, emphasis and quotation-mark differences.
+- One unverifiable field or NPC no longer discards the rest of a valid scan. Verified profiles are saved, with skipped items explained under **Scan details** and a **Retry** action.
+- Scan status reports profiles created or updated, or says when no relevant NPCs were found.
+- The wand-menu entry now uses SillyTavern's native icon-and-text row, with keyboard support.
 
 ## Version 1.0.1
 
@@ -72,7 +79,7 @@ After the model's response:
 4. Continue the story and confirm those details persist. Reopen the chat to check persistence.
 5. Swipe or delete the encounter. Its story-derived facts should disappear, its manual corrections should remain, and an NPC with no surviving encounter should become inactive.
 
-Detection and interpretation depend on the selected model. The extension checks JSON structure, permitted fields, identity anchors, and exact source excerpts; matching quotations cannot prove that an LLM interpreted a passage correctly. Use editing and locks for corrections. Small models may require a retry or a manual profile.
+Detection and interpretation depend on the selected model. The extension checks JSON structure, permitted fields, identity anchors, and citations against the scanned passages. Citations preserve the original story text but cannot prove that an LLM interpreted it correctly. Unverifiable fields or encounters are skipped and reported; malformed JSON or an invalid top-level response changes nothing. Use editing and locks for corrections. Small models may require a retry or a manual profile.
 
 ## Development and validation
 

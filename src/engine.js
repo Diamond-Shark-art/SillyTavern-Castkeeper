@@ -56,8 +56,8 @@ export class Engine {
         return { profiles: profiles(this.state()), revision: this.state().revision, chatKey: chatKey(this.getContext()), settings: this.settings(), status: this.status };
     }
 
-    signal(kind, message) {
-        this.status = { kind, message, retry: Boolean(this.retrySpec) && kind === 'error' };
+    signal(kind, message, details = []) {
+        this.status = { kind, message, details, retry: Boolean(this.retrySpec) && ['error', 'warning'].includes(kind) };
         this.onChange();
     }
 
@@ -159,8 +159,9 @@ export class Engine {
                 this.retrySpec = task.spec;
                 const result = await this.run(task.spec);
                 if (task.epoch === this.epoch && task.key === chatKey(this.getContext())) {
-                    this.retrySpec = null;
-                    this.signal('idle', result?.preview ? 'Suggestions ready. Review them before applying.' : 'Profiles are up to date.');
+                    const summary = result?.scanSummary;
+                    this.retrySpec = summary?.issues.length ? task.spec : null;
+                    this.signal(summary?.issues.length ? 'warning' : 'idle', summary?.message ?? (result?.preview ? 'Suggestions ready. Review them before applying.' : 'Profiles are up to date.'), summary?.issues);
                 }
                 task.resolve(result);
             } catch (error) {
@@ -206,16 +207,24 @@ export class Engine {
             this.signal('busy', spec.recent ? 'Scanning the last six messages…' : 'Scanning NPC encounters…');
             const payload = await this.quiet(scanPrompt(messages, profiles(this.state()), exclusions(context)), ticket);
             const next = structuredClone(this.state());
-            const plans = scanChanges(next, payload, messages, exclusions(this.getContext()));
-            applyScan(next, plans, source);
-            await this.commit(next, ticket);
+            const { plans, issues } = scanChanges(next, payload, messages, exclusions(this.getContext()));
+            // Do not mark an entirely unverifiable response as a successful scan.
+            if (plans.length || !issues.length) {
+                applyScan(next, plans, source);
+                await this.commit(next, ticket);
+            }
+            const created = plans.filter(plan => plan.isNew).length;
+            const updated = plans.length - created;
+            const counts = [created ? `Created ${created} profile${created === 1 ? '' : 's'}` : '', updated ? `updated ${updated} profile${updated === 1 ? '' : 's'}` : ''].filter(Boolean).join('; ');
+            const scanSummary = { issues, message: counts ? `${counts[0].toUpperCase()}${counts.slice(1)}.` : (issues.length ? 'No profiles could be verified.' : 'No relevant NPCs found in the scanned messages.') };
+            if (issues.length) scanSummary.message += ` Skipped ${issues.length} unverified ${issues.length === 1 ? 'item' : 'items'}. See Scan details or retry.`;
             const ids = plans.filter(plan => plan.isNew).map(plan => plan.id);
             if (this.settings().autoComplete && ids.length) {
                 const completionSpec = { kind: 'complete', ids, automatic: true, source };
                 this.retrySpec = completionSpec;
-                return this.complete(completionSpec);
+                await this.complete(completionSpec);
             }
-            return null;
+            return { scanSummary };
         }
         return this.complete(spec);
     }

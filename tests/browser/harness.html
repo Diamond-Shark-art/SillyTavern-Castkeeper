@@ -8,7 +8,13 @@
   <style>
     body { background: #101819; color: #e5e9e6; font: 14px system-ui, sans-serif; margin: 24px; }
     #extensions_settings2 { max-width: 500px; margin: 25px 0; }
-    #extensionsMenu button { padding: 12px; font: inherit; }
+    #extensionsMenu { width: fit-content; border: 1px solid #444; border-radius: 12px; padding: 10px; background: #202020; }
+    #extensionsMenu > div { padding: 5px; display: flex; column-gap: 10px; align-items: baseline; cursor: pointer; opacity: .5; }
+    #extensionsMenu > div:hover { opacity: 1; }
+    #extensionsMenu .fa-fw { width: 1.25em; text-align: center; }
+    /* Stand-ins for the host's Font Awesome font in this offline fixture. */
+    .fa-address-book::before { content: '▣'; }
+    .fa-book-open::before { content: '▤'; }
     #send_textarea { width: min(450px, 85vw); }
     /* Relevant host drawer structure/styles, plus a theme's global heading rule. */
     .inline-drawer-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
@@ -23,7 +29,7 @@
 <body>
   <h1>Castkeeper test host</h1>
   <p>A mocked SillyTavern host. No API calls are made.</p>
-  <div id="extensionsMenu"></div>
+  <div id="extensionsMenu"><div class="list-group-item"><i class="fa-solid fa-book-open fa-fw"></i><span>Open Data Bank</span></div></div>
   <div id="extensions_settings2">
     <div class="inline-drawer">
       <div class="inline-drawer-toggle inline-drawer-header"><b>Example native extension</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>
@@ -47,7 +53,13 @@
     const host = createHost();
     window.host = host;
     host.respond = async prompt => {
-      if (prompt.includes('TASK: Extract')) return JSON.stringify(response(npc()));
+      if (prompt.includes('TASK: Extract')) {
+        const sources = JSON.parse(prompt.split('AUTHORIZED SOURCE PASSAGES:\n')[1].split('\nREQUEST IDENTIFIER:')[0]);
+        const ref = { sourceId: sources.find(item => item.text.includes('Mira')).sourceId };
+        const result = npc(); result.encounter = ref;
+        for (const cell of Object.values(result.fields)) cell.evidence = [ref];
+        return JSON.stringify(response(result));
+      }
       const target = profiles(host.chatMetadata[KEY])[0];
       return JSON.stringify({ profiles: [{ id: target.id, fields: { backstory: 'Mira once tended the gardens of a coastal inn. She opened this tavern to give travelers a quiet place to rest.', ancestry: 'Coastal ancestry' } }] });
     };

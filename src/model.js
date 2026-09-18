@@ -143,51 +143,96 @@ export function parseResponse(raw) {
     return parsed;
 }
 
-function evidence(value, messages) {
-    if (!isObject(value) || !Number.isInteger(value.messageId) || typeof value.quote !== 'string' || !value.quote.trim()) {
-        throw new Error('A fact is missing its source excerpt. Nothing was changed.');
-    }
-    const message = messages.find(item => item.messageId === value.messageId);
-    if (!message || !message.text.includes(value.quote)) throw new Error('A source excerpt does not match the scanned messages. Nothing was changed.');
-    return { messageId: value.messageId, quote: value.quote };
+// Stable within the authorized exchange; every passage is an unchanged source substring.
+export function sourcePassages(messages) {
+    return messages.flatMap(message => {
+        const chunks = [];
+        for (const paragraph of message.text.split(/\n+/)) {
+            let rest = paragraph.trim();
+            while (rest) {
+                let end = rest.length;
+                if (end > 900) {
+                    const boundary = rest.lastIndexOf(' ', 900);
+                    end = boundary > 0 ? boundary : 900;
+                }
+                chunks.push(rest.slice(0, end));
+                rest = rest.slice(end).trim();
+            }
+        }
+        return chunks.map((text, index) => ({ sourceId: `m${message.messageId}:p${index}`, messageId: message.messageId, speaker: message.speaker, role: message.role, text }));
+    });
 }
 
-/** Validate the WHOLE response before producing a mutation. Excerpts verify provenance, not semantic truth. */
+// Normalize presentation only. Never use fuzzy matching or remove substantive words.
+function sourceText(text) {
+    return text.normalize('NFKC').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+        .replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function evidence(value, messages, passages) {
+    if (!isObject(value)) throw new Error('Missing source citation.');
+    if (typeof value.sourceId === 'string') {
+        const passage = passages.find(item => item.sourceId === value.sourceId);
+        if (passage) return { sourceId: passage.sourceId, messageId: passage.messageId, quote: passage.text };
+    }
+    if (typeof value.quote !== 'string' || !sourceText(value.quote)) throw new Error('Missing or unknown source citation.');
+    const quote = sourceText(value.quote);
+    const matches = messages.filter(item => sourceText(item.text).includes(quote));
+    // Older responses may copy display numbering or numeric strings. Recover only
+    // when the quote itself identifies one authorized message unambiguously.
+    const claimed = matches.find(item => item.messageId === Number(value.messageId));
+    const message = claimed ?? (matches.length === 1 ? matches[0] : null);
+    if (!message) throw new Error('The source excerpt does not uniquely match the scanned messages.');
+    const passage = passages.find(item => item.messageId === message.messageId && sourceText(item.text).includes(quote));
+    return { messageId: message.messageId, quote: message.text.includes(value.quote) ? value.quote : (passage?.text ?? message.text) };
+}
+
+/** Validate before mutation; isolate unverifiable fields/NPCs from verified results.
+ * Citations verify provenance, not semantic truth.
+ */
 export function scanChanges(state, payload, messages, excludedNames = [], makeId = uid) {
     if (!Array.isArray(payload.npcs) || payload.npcs.length > 30) throw new Error('Expected an NPC list containing at most 30 individuals.');
-    const roster = profiles(state), plans = [], seenIds = new Set();
+    const roster = profiles(state), plans = [], issues = [], seenIds = new Set(), passages = sourcePassages(messages);
+    let ignored = 0;
     for (const npc of payload.npcs) {
-        if (!isObject(npc) || !['named', 'role'].includes(npc.identityKind) || !(npc.id === null || typeof npc.id === 'string')) throw new Error('Invalid NPC identity.');
-        const name = fieldValue('name', npc.name);
-        if (!name) throw new Error('An NPC needs a name or a distinct role label.');
-        const encounter = evidence(npc.encounter, messages);
-        if (!isObject(npc.fields)) throw new Error('Invalid NPC fields.');
-        const fields = {};
-        for (const [key, cell] of Object.entries(npc.fields)) {
-            if (!isObject(cell) || !Array.isArray(cell.evidence) || !cell.evidence.length || cell.evidence.length > 8) throw new Error('Each extracted field needs source evidence.');
-            fields[key] = { value: fieldValue(key, cell.value), provenance: 'story', evidence: cell.evidence.map(item => evidence(item, messages)) };
-        }
-        if ([...excludedNames, ...state.suppressedNames].some(item => normalizeName(item) === normalizeName(name))) continue;
-        if (npc.id && state.profiles.some(item => item.id === npc.id && item.deleted)) continue;
-        let profile = npc.id ? roster.find(item => item.id === npc.id) : null;
-        if (npc.id && !profile) throw new Error('The model referred to an unknown NPC ID.');
-        if (!profile) {
-            const matches = roster.filter(item => namesOf(item).some(alias => normalizeName(alias) === normalizeName(name)));
-            if (matches.length > 1) throw new Error(`Ambiguous identity: ${name}. Edit the profiles to distinguish them, then retry.`);
-            profile = matches[0];
-        }
-        const anchors = profile ? namesOf(profile) : [name];
-        if (!anchors.some(alias => mentions(encounter.quote, alias))) throw new Error(`The encounter excerpt does not identify ${name}. Use a name or role label actually present in the text.`);
-        if (fields.name && !fields.name.evidence.some(item => mentions(item.quote, fields.name.value))) throw new Error('A new name needs an excerpt containing that name.');
-        if (fields.aliases && fields.aliases.value.some(alias => !fields.aliases.evidence.some(item => mentions(item.quote, alias)))) throw new Error('An alias needs an excerpt containing that alias.');
-        const id = profile?.id ?? makeId();
-        if (seenIds.has(id) || plans.some(item => !profile && normalizeName(item.name) === normalizeName(name))) throw new Error(`Duplicate or ambiguous NPC in response: ${name}.`);
-        seenIds.add(id);
-        if (!profile) fields.name = { value: name, provenance: 'story', evidence: [encounter] };
-        for (const key of profile?.locks ?? []) delete fields[key];
-        plans.push({ id, name, isNew: !profile, fields });
+        let name = 'Unnamed entry';
+        try {
+            if (!isObject(npc) || !['named', 'role'].includes(npc.identityKind) || !(npc.id === null || typeof npc.id === 'string')) throw new Error('Invalid NPC identity.');
+            name = fieldValue('name', npc.name);
+            if (!name) throw new Error('An NPC needs a name or a distinct role label.');
+            if ([...excludedNames, ...state.suppressedNames].some(item => normalizeName(item) === normalizeName(name))
+                || (npc.id && state.profiles.some(item => item.id === npc.id && item.deleted))) { ignored++; continue; }
+            const encounter = evidence(npc.encounter, messages, passages);
+            if (!isObject(npc.fields)) throw new Error('Invalid NPC fields.');
+            let profile = npc.id ? roster.find(item => item.id === npc.id) : null;
+            if (npc.id && !profile) throw new Error('The model referred to an unknown NPC ID.');
+            if (!profile) {
+                const matches = roster.filter(item => namesOf(item).some(alias => normalizeName(alias) === normalizeName(name)));
+                if (matches.length > 1) throw new Error(`Ambiguous identity: ${name}. Edit the profiles to distinguish them, then retry.`);
+                profile = matches[0];
+            }
+            const anchors = profile ? namesOf(profile) : [name];
+            if (!anchors.some(alias => mentions(sourceText(encounter.quote), sourceText(alias)))) throw new Error(`The encounter citation does not identify ${name}. Use a name or role label present in the text.`);
+            const id = profile?.id ?? makeId();
+            if (seenIds.has(id) || plans.some(item => !profile && normalizeName(item.name) === normalizeName(name))) throw new Error(`Duplicate or ambiguous NPC in response: ${name}.`);
+            const fields = {};
+            for (const [key, cell] of Object.entries(npc.fields)) {
+                if (profile?.locks.includes(key)) continue;
+                try {
+                    const value = fieldValue(key, cell?.value);
+                    if (!isObject(cell) || !Array.isArray(cell.evidence) || !cell.evidence.length || cell.evidence.length > 8) throw new Error('Each extracted field needs source evidence.');
+                    const sources = cell.evidence.map(item => evidence(item, messages, passages));
+                    if (key === 'name' && !sources.some(item => mentions(sourceText(item.quote), value))) throw new Error('A new name needs a citation containing that name.');
+                    if (key === 'aliases' && value.some(alias => !sources.some(item => mentions(sourceText(item.quote), alias)))) throw new Error('An alias needs a citation containing that alias.');
+                    fields[key] = { value, provenance: 'story', evidence: sources };
+                } catch (error) { issues.push({ npc: name, field: key, reason: error.message }); }
+            }
+            seenIds.add(id);
+            if (!profile) fields.name = { value: name, provenance: 'story', evidence: [encounter] };
+            plans.push({ id, name, isNew: !profile, fields });
+        } catch (error) { issues.push({ npc: name, field: null, reason: error.message }); }
     }
-    return plans;
+    return { plans, issues, ignored };
 }
 
 export function applyScan(state, plans, source) {
