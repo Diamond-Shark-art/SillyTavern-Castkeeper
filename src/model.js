@@ -17,7 +17,20 @@ export const isObject = value => value !== null && typeof value === 'object' && 
 export const normalizeName = value => String(value ?? '').normalize('NFKC').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
 export const empty = value => value == null || value === '' || (Array.isArray(value) && value.length === 0);
 export const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-export const uid = () => globalThis.crypto.randomUUID();
+let fallbackIdCounter = 0;
+// These are record/request identifiers, never authentication tokens. randomUUID is
+// unavailable on many HTTP LAN installs, even when getRandomValues is supported.
+export function uid(randomSource = globalThis.crypto) {
+    if (typeof randomSource?.randomUUID === 'function') return randomSource.randomUUID();
+    if (typeof randomSource?.getRandomValues === 'function') {
+        const bytes = randomSource.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    return `npc-${Date.now().toString(36)}-${(++fallbackIdCounter).toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
 
 export function fieldValue(key, value) {
     const definition = Object.hasOwn(FIELDS, key) ? FIELDS[key] : null;

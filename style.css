@@ -1,7 +1,6 @@
 .npc-profiles-settings, .npc-profiles-dialog { --npc-accent: #b8ccab; --npc-line: rgba(160, 175, 170, .24); --npc-muted: #a7b2b2; color: var(--SmartThemeBodyColor, #e5e9e6); font-family: inherit; }
-.npc-profiles-settings { margin: 8px 0; }
-.npc-settings-drawer { border: 1px solid var(--npc-line); border-radius: 8px; padding: 10px; }
-.npc-settings-drawer summary { font-weight: 600; cursor: pointer; padding: 3px; }
+.npc-profiles-settings { margin: 0; }
+.npc-profiles-settings .inline-drawer-header:focus-visible { outline: 2px solid var(--npc-accent); outline-offset: 2px; }
 .npc-setting { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0; }
 .npc-setting input { margin-top: 4px; flex: 0 0 auto; }
 .npc-setting strong, .npc-setting small { display: block; }
@@ -14,6 +13,7 @@
 .npc-profiles-dialog[open] { display: flex; flex-direction: column; }
 .npc-profiles-dialog::backdrop { background: #081010b8; backdrop-filter: blur(5px); }
 .npc-profiles-dialog *, .npc-profiles-settings * { box-sizing: border-box; }
+.npc-profiles-dialog h2, .npc-profiles-dialog h3 { border: 0; padding: 0; background: none; box-shadow: none; }
 .npc-profiles-dialog [hidden], .npc-profiles-settings [hidden] { display: none !important; }
 .npc-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 24px 26px 14px; }
 .npc-eyebrow { font-size: 10px; letter-spacing: .16em; color: var(--npc-accent); }

@@ -1,6 +1,6 @@
 {
   "name": "sillytavern-castkeeper",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "NPC profiles, story continuity, and optional character generation for SillyTavern",

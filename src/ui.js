@@ -27,8 +27,22 @@ export class ProfilesUI {
 
     mount() {
         this.settingsRoot = element('div', 'npc-profiles-settings');
-        const drawer = element('details', 'npc-settings-drawer');
-        drawer.append(element('summary', '', 'Castkeeper'));
+        const drawer = element('div', 'inline-drawer');
+        const toggle = element('div', 'inline-drawer-toggle inline-drawer-header');
+        toggle.setAttribute('role', 'button'); toggle.tabIndex = 0;
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-controls', 'castkeeper-settings-content');
+        const icon = element('div', 'inline-drawer-icon fa-solid fa-circle-chevron-down down');
+        icon.setAttribute('aria-hidden', 'true');
+        toggle.append(element('b', '', 'Castkeeper'), icon);
+        // The host's delegated click handler owns animation and visibility. Only
+        // add keyboard activation and ARIA here, to avoid toggling the drawer twice.
+        toggle.addEventListener('click', () => toggle.setAttribute('aria-expanded', String(icon.classList.contains('down'))));
+        toggle.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle.click(); }
+        });
+        const content = element('div', 'inline-drawer-content'); content.id = 'castkeeper-settings-content';
+        drawer.append(toggle, content);
         this.settingsControls = {};
         for (const [key, text, help] of [
             ['enabled', 'Enable Castkeeper', 'Keep a separate NPC library for each chat.'],
@@ -40,13 +54,13 @@ export class ProfilesUI {
             input.type = 'checkbox'; input.dataset.setting = key;
             input.addEventListener('change', () => this.action(() => this.engine.setSettings({ [key]: input.checked })));
             const copy = element('span'); copy.append(element('strong', '', text), element('small', '', help));
-            row.append(input, copy); drawer.append(row); this.settingsControls[key] = input;
+            row.append(input, copy); content.append(row); this.settingsControls[key] = input;
         }
         const budgetLabel = element('label', 'npc-budget', 'Profile context budget (tokens)');
         const budget = element('input', 'text_pole'); budget.type = 'number'; budget.min = '128'; budget.max = '8000'; budget.step = '1'; budget.dataset.setting = 'budget';
         budget.addEventListener('change', () => this.action(() => this.engine.setSettings({ budget: Number(budget.value) })));
-        budgetLabel.append(budget); drawer.append(budgetLabel); this.settingsControls.budget = budget;
-        drawer.append(button('Open Castkeeper', () => this.open()));
+        budgetLabel.append(budget); content.append(budgetLabel); this.settingsControls.budget = budget;
+        content.append(button('Open Castkeeper', () => this.open()));
         this.settingsRoot.append(drawer);
         (document.querySelector('#extensions_settings2') ?? document.querySelector('#extensions_settings') ?? document.body).append(this.settingsRoot);
         this.launcher = button('Castkeeper', () => this.open(), 'npc-launcher');
@@ -89,7 +103,12 @@ export class ProfilesUI {
     async action(callback) {
         this.error.hidden = true;
         try { return await callback(); }
-        catch (error) { this.error.textContent = error.message; this.error.hidden = false; }
+        catch (error) {
+            // Background actions already expose their error beside Retry.
+            if (this.engine.status.kind !== 'error' || this.engine.status.message !== error.message) {
+                this.error.textContent = error.message; this.error.hidden = false;
+            }
+        }
         finally { this.refresh(); }
     }
 

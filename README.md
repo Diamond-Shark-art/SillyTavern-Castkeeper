@@ -8,7 +8,7 @@ Targets **SillyTavern 1.19.0 or later**. Uses your currently selected AI connect
 
 ### Local folder or ZIP
 
-1. Extract `SillyTavern-Castkeeper-1.0.0.zip`, or use the `dist/SillyTavern-Castkeeper` folder produced by `npm run package`.
+1. Extract `SillyTavern-Castkeeper-1.0.1.zip`, or use the `dist/SillyTavern-Castkeeper` folder produced by `npm run package`.
 2. Copy that folder into **one** of these locations inside your SillyTavern installation:
    - Current user: `data/<your-user-handle>/extensions/SillyTavern-Castkeeper`
    - All users: `public/scripts/extensions/third-party/SillyTavern-Castkeeper`
@@ -28,6 +28,14 @@ https://github.com/Diamond-Shark-art/SillyTavern-Castkeeper
 Reload SillyTavern after installation. Updates can be pulled through SillyTavern's extension manager.
 
 Prefer a local installation? Download the ZIP from [Releases](https://github.com/Diamond-Shark-art/SillyTavern-Castkeeper/releases/latest) and follow the folder instructions above.
+
+## Version 1.0.1
+
+- Fixed scanning and manual profile creation on HTTP/LAN installations where `crypto.randomUUID()` is unavailable.
+- Settings now use SillyTavern's native extension drawer and theme styling.
+- Removed duplicate action errors and isolated dialog headings from global theme decorations.
+
+To update a Git installation, open **Extensions → Manage extensions**, update Castkeeper, and reload the page. Existing settings and profiles are preserved.
 
 ## Use
 

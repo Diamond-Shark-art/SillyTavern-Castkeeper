@@ -1,5 +1,5 @@
 import {
-    KEY, DEFAULTS, readState, profiles, historySources, latestAssistant, evidenceMessages,
+    KEY, DEFAULTS, uid, readState, profiles, historySources, latestAssistant, evidenceMessages,
     reconcile, parseResponse, scanChanges, applyScan, editProfile, deleteProfile,
     completionChanges, applyCompletion, missingFields, injection,
 } from './model.js';
@@ -181,7 +181,7 @@ export class Engine {
 
     async quiet(prompt, ticket) {
         this.assert(ticket);
-        this.ownPrompt = `${prompt}\nREQUEST IDENTIFIER: npc-profiles-${globalThis.crypto.randomUUID()}`;
+        this.ownPrompt = `${prompt}\nREQUEST IDENTIFIER: npc-profiles-${uid()}`;
         this.clearInjection();
         try {
             const context = this.getContext();

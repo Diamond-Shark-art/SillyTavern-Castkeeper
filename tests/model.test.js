@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, profiles, scanChanges, applyScan, evidenceMessages, historySources, reconcile, editProfile, deleteProfile, completionChanges, applyCompletion, injection, parseResponse, mentions } from '../src/model.js';
+import { createState, profiles, scanChanges, applyScan, evidenceMessages, historySources, reconcile, editProfile, deleteProfile, completionChanges, applyCompletion, injection, parseResponse, mentions, uid } from '../src/model.js';
 import { chat, npc, response, quote, fact } from './fixtures.js';
 
 function seeded() {
@@ -158,4 +158,18 @@ test('manual recreation explicitly restores a suppressed name', () => {
     const { state, messages } = seeded(); deleteProfile(state, 'mira');
     editProfile(state, null, { name: 'Mira' }, [], () => 'restored');
     assert.equal(scanChanges(state, response(npc()), messages)[0].id, 'restored');
+});
+
+test('ID generation uses native UUIDs when available and random bytes on HTTP origins', () => {
+    assert.equal(uid({ randomUUID() { return 'native-id'; } }), 'native-id');
+    const source = { getRandomValues(bytes) { return crypto.getRandomValues(bytes); } };
+    const ids = new Set(Array.from({ length: 100 }, () => uid(source)));
+    assert.equal(ids.size, 100);
+    for (const id of ids) assert.match(id, /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
+});
+
+test('IDs remain usable and distinct if the browser exposes no crypto API', () => {
+    const ids = new Set(Array.from({ length: 100 }, () => uid(null)));
+    assert.equal(ids.size, 100);
+    for (const id of ids) assert.match(id, /^npc-[\da-z]+-[\da-z]+-[\da-z]*$/);
 });

@@ -10,18 +10,40 @@
     #extensions_settings2 { max-width: 500px; margin: 25px 0; }
     #extensionsMenu button { padding: 12px; font: inherit; }
     #send_textarea { width: min(450px, 85vw); }
+    /* Relevant host drawer structure/styles, plus a theme's global heading rule. */
+    .inline-drawer-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    #extensions_settings2 .inline-drawer-toggle.inline-drawer-header { background: #272727; margin-bottom: 5px; border-radius: 10px; padding: 10px 12px; border: 1px solid #333; }
+    .inline-drawer-content { display: none; }
+    .inline-drawer-icon::before { content: '⌄'; }
+    .inline-drawer-icon.up::before { content: '⌃'; }
+    h3 { border-left: 4px solid #5ba7d5; padding-left: 10px; }
     :root { color-scheme: dark; }
   </style>
 </head>
 <body>
   <h1>Castkeeper test host</h1>
   <p>A mocked SillyTavern host. No API calls are made.</p>
-  <div id="extensionsMenu"></div><div id="extensions_settings2"></div>
+  <div id="extensionsMenu"></div>
+  <div id="extensions_settings2">
+    <div class="inline-drawer">
+      <div class="inline-drawer-toggle inline-drawer-header"><b>Example native extension</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>
+      <div class="inline-drawer-content">Native drawer content</div>
+    </div>
+  </div>
   <textarea id="send_textarea" aria-label="Chat message" placeholder="Write a message…"></textarea>
   <script type="module">
     import { createHost } from '/tests/host.js';
     import { npc, response } from '/tests/fixtures.js';
     import { profiles, KEY } from '/src/model.js';
+    // Model SillyTavern's delegated drawer click handling (script.js).
+    document.addEventListener('click', event => {
+      const toggle = event.target.closest('.inline-drawer-toggle');
+      if (!toggle) return;
+      const drawer = toggle.closest('.inline-drawer'), icon = drawer.querySelector('.inline-drawer-icon'), content = drawer.querySelector('.inline-drawer-content');
+      icon.classList.toggle('down'); icon.classList.toggle('up');
+      icon.classList.toggle('fa-circle-chevron-down'); icon.classList.toggle('fa-circle-chevron-up');
+      content.style.display = getComputedStyle(content).display === 'none' ? 'block' : 'none';
+    });
     const host = createHost();
     window.host = host;
     host.respond = async prompt => {
