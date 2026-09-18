@@ -1,0 +1,18 @@
+{
+  "display_name": "Castkeeper",
+  "loading_order": 50,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "Diamond-Shark-art",
+  "version": "1.0.0",
+  "minimum_client_version": "1.19.0",
+  "generate_interceptor": "npcProfilesBeforeGeneration",
+  "hooks": {
+    "disable": "onDisable",
+    "enable": "onEnable",
+    "delete": "onDisable"
+  },
+  "homePage": "https://github.com/Diamond-Shark-art/SillyTavern-Castkeeper"
+}

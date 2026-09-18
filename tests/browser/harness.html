@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Castkeeper — test host</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { background: #101819; color: #e5e9e6; font: 14px system-ui, sans-serif; margin: 24px; }
+    #extensions_settings2 { max-width: 500px; margin: 25px 0; }
+    #extensionsMenu button { padding: 12px; font: inherit; }
+    #send_textarea { width: min(450px, 85vw); }
+    :root { color-scheme: dark; }
+  </style>
+</head>
+<body>
+  <h1>Castkeeper test host</h1>
+  <p>A mocked SillyTavern host. No API calls are made.</p>
+  <div id="extensionsMenu"></div><div id="extensions_settings2"></div>
+  <textarea id="send_textarea" aria-label="Chat message" placeholder="Write a message…"></textarea>
+  <script type="module">
+    import { createHost } from '/tests/host.js';
+    import { npc, response } from '/tests/fixtures.js';
+    import { profiles, KEY } from '/src/model.js';
+    const host = createHost();
+    window.host = host;
+    host.respond = async prompt => {
+      if (prompt.includes('TASK: Extract')) return JSON.stringify(response(npc()));
+      const target = profiles(host.chatMetadata[KEY])[0];
+      return JSON.stringify({ profiles: [{ id: target.id, fields: { backstory: 'Mira once tended the gardens of a coastal inn. She opened this tavern to give travelers a quiet place to rest.', ancestry: 'Coastal ancestry' } }] });
+    };
+    window.SillyTavern = { getContext: () => host };
+    await import('/index.js');
+    await host.eventSource.emit('APP_READY');
+    window.ready = true;
+  </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "sillytavern-castkeeper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "NPC profiles, story continuity, and optional character generation for SillyTavern",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:ui": "playwright test",
+    "check": "node --check index.js && node --check src/model.js && node --check src/prompts.js && node --check src/engine.js && node --check src/ui.js",
+    "package": "node scripts/package.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Diamond-Shark-art/SillyTavern-Castkeeper.git"
+  }
+}
